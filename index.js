@@ -1,4 +1,4 @@
-const {loadFrameData} = require('./frame.js');
+const {loadFrameData, loadSubtitleData} = require('./frame.js');
 const express = require('express'), useragent = require('express-useragent');
 const app = express();
 const port = 6001;
@@ -9,12 +9,11 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
 
 
 (async () => {
+  const subData = loadSubtitleData();
   const [frameInterval, frameData] = loadFrameData();
   const FRAME_INC = 4;
   const FRAME_START = 30;
-  const FRAME_GAP = 4;
-  const clearTop = Array(FRAME_GAP).fill('\n').join('');
-  const clearBot = Array(2).fill('\n').join('');
+  const FRAME_WIDTH = 120;
   console.log('Loaded frame data');
   app.use(useragent.express());
   app.get('*', async (request, response) => {
@@ -40,13 +39,18 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
         abortFlag = true;
         console.log('Response Closed');
       });
-
+      let subIndex = 0, lyric = '';
       for (let i = FRAME_START; i < frameData.length; i+=FRAME_INC) {
         if (abortFlag) {
           console.log('Aborted playback loop');
           break;
         }
-        response.write(clearTop + frameData[i].data + clearBot);
+        if (subIndex < subData.length && i >= subData[subIndex].frameIndex) {
+          lyric = subData[subIndex].text;
+          console.log(lyric);
+          subIndex++;
+        }
+        response.write('\n\n' + ' '.repeat((FRAME_WIDTH - lyric.length)/2|0) + lyric + '\n\n' + frameData[i].data + '\n\n');
         await delayPromise(frameInterval * FRAME_INC);
       }
 

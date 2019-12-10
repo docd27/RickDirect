@@ -1,7 +1,8 @@
 const fs = require('fs'), {promisify} = require('util'), zlib = require('zlib');
 const imageToAscii = promisify(require('image-to-ascii'));
 const DATA_PATH = './data/', DATA_FILE = DATA_PATH + 'data.json';
-const DATA_FRAMEINTERVAL = (1000 / 25) | 0;
+const DATA_FPS = 25;
+const DATA_FRAMEINTERVAL = (1000 / DATA_FPS) | 0;
 // Convert mp4 to jpegs with ffmpeg -i Rick_Astley_Never_Gonna_Give_You_Up.mp4 image%d.jpg
 
 const genFrameData = async () => {
@@ -46,5 +47,26 @@ const loadFrameData = () => {
   return [DATA_FRAMEINTERVAL, frameData];
 };
 
+const SUBTITLE_FILE = './subtitles.json';
+const loadSubtitleData = () => {
+  const parseTimecode = (timecode) => {
+    const [minStr, secStr] = timecode.split(':');
+    const secs = Number.parseFloat(secStr);
+    const mins = Number.parseInt(minStr);
+    const timeSecs = mins * 60 + secs;
+    if (!Number.isFinite(timeSecs)) throw new Error('Invalid timecode');
+    const frameIndex = timeSecs * DATA_FPS | 0;
+    return frameIndex;
+  };
+  if (!fs.existsSync(SUBTITLE_FILE)) throw new Error('Subtitle data missing');
+  const subtitleData = JSON.parse(fs.readFileSync(SUBTITLE_FILE, 'utf8'));
+  for (let i = 0; i < subtitleData.length; i++) {
+    subtitleData[i].frameIndex = parseTimecode(subtitleData[i].time);
+  }
+  subtitleData.sort(({frameIndex: a}, {frameIndex: b}) => a - b);
+  return subtitleData;
+};
+
 exports.genFrameData = genFrameData;
 exports.loadFrameData = loadFrameData;
+exports.loadSubtitleData = loadSubtitleData;
