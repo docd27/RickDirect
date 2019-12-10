@@ -17,7 +17,7 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
   const clearBot = Array(2).fill('\n').join('');
   console.log('Loaded frame data');
   app.use(useragent.express());
-  app.get('/', async (request, response) => {
+  app.get('*', async (request, response) => {
     if (request.useragent.isCurl) {
       response.setHeader('Connection', 'Transfer-Encoding');
       response.setHeader('Content-Type', 'text/html; charset=utf-8');

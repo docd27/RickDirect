@@ -1,4 +1,4 @@
-const fs = require('fs'), {promisify} = require('util');
+const fs = require('fs'), {promisify} = require('util'), zlib = require('zlib');
 const imageToAscii = promisify(require('image-to-ascii'));
 const DATA_PATH = './data/', DATA_FILE = DATA_PATH + 'data.json';
 const DATA_FRAMEINTERVAL = (1000 / 25) | 0;
@@ -35,14 +35,14 @@ const genFrameData = async () => {
   }
   console.log(`Writing to ${DATA_FILE}`);
   if (fs.existsSync(DATA_FILE)) fs.unlinkSync(DATA_FILE);
-  fs.writeFileSync(DATA_FILE, JSON.stringify(frames), 'utf8');
+  fs.writeFileSync(DATA_FILE, zlib.deflateSync(JSON.stringify(frames)).toString('base64'), 'utf8');
   console.log(`Completed`);
   return true;
 };
 
 const loadFrameData = () => {
   if (!fs.existsSync(DATA_FILE)) throw new Error('Data missing, need to generate');
-  const frameData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const frameData = JSON.parse(zlib.inflateSync(Buffer.from(fs.readFileSync(DATA_FILE, 'utf8'), 'base64')));
   return [DATA_FRAMEINTERVAL, frameData];
 };
 
