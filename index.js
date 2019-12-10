@@ -5,14 +5,12 @@ const port = 6001;
 
 const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
 
-
-
-
 (async () => {
   const subData = loadSubtitleData();
   const [frameInterval, frameData] = loadFrameData();
   const FRAME_INC = 4,
-    FRAME_START = 30,
+    // FRAME_START = 30,
+    FRAME_START = 0,
     FRAME_WIDTH = 120, MIN_WAIT = 10;
   console.log('Loaded frame data');
   app.use(useragent.express());
@@ -52,8 +50,7 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
         }
         const lastIndex = (subIndex > 0 ? subData[subIndex-1].frameIndex : 0);
         const lyricPerc = subIndex < subData.length ? (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
-        console.log(`${lyric} + ${lyricPerc.toFixed(2)}`);
-        response.write('\n\n' + ' '.repeat((FRAME_WIDTH - lyric.length)/2|0) + lyric + '\n\n' + frameData[i].data + '\n\n');
+        response.write('\n\n' + ' '.repeat((FRAME_WIDTH - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) + lyric + '\n\n' + frameData[i].data + '\n\n');
         const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
         const timeToWait = frameInterval * FRAME_INC + drift;
         if (timeToWait > MIN_WAIT) await delayPromise(timeToWait);
@@ -61,7 +58,8 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
 
       response.end();
     } else {
-      console.log(`Request from ${request.useragent}`);
+      console.log(`Request from`);
+      console.log(request.useragent);
       response.send(`Nothing to see here, please move along.`);
     }
   });
