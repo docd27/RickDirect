@@ -11,9 +11,9 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
 (async () => {
   const subData = loadSubtitleData();
   const [frameInterval, frameData] = loadFrameData();
-  const FRAME_INC = 4;
-  const FRAME_START = 30;
-  const FRAME_WIDTH = 120;
+  const FRAME_INC = 4,
+    FRAME_START = 30,
+    FRAME_WIDTH = 120, MIN_WAIT = 10;
   console.log('Loaded frame data');
   app.use(useragent.express());
   app.get('*', async (request, response) => {
@@ -40,6 +40,7 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
         console.log('Response Closed');
       });
       let subIndex = 0, lyric = '';
+      const startTime = Date.now();
       for (let i = FRAME_START; i < frameData.length; i+=FRAME_INC) {
         if (abortFlag) {
           console.log('Aborted playback loop');
@@ -47,16 +48,21 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
         }
         if (subIndex < subData.length && i >= subData[subIndex].frameIndex) {
           lyric = subData[subIndex].text;
-          console.log(lyric);
           subIndex++;
         }
+        const lastIndex = (subIndex > 0 ? subData[subIndex-1].frameIndex : 0);
+        const lyricPerc = subIndex < subData.length ? (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
+        console.log(`${lyric} + ${lyricPerc.toFixed(2)}`);
         response.write('\n\n' + ' '.repeat((FRAME_WIDTH - lyric.length)/2|0) + lyric + '\n\n' + frameData[i].data + '\n\n');
-        await delayPromise(frameInterval * FRAME_INC);
+        const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
+        const timeToWait = frameInterval * FRAME_INC + drift;
+        if (timeToWait > MIN_WAIT) await delayPromise(timeToWait);
       }
 
       response.end();
     } else {
-      response.send(`Hello World!\n${JSON.stringify(request.useragent)}`);
+      console.log(`Request from ${request.useragent}`);
+      response.send(`Nothing to see here, please move along.`);
     }
   });
 
