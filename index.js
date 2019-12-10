@@ -1,4 +1,5 @@
 const {loadFrameData, loadSubtitleData} = require('./frame.js');
+const URL = require('url').URL;
 const express = require('express'), useragent = require('express-useragent');
 const app = express();
 const port = 6001;
@@ -9,8 +10,8 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
   const subData = loadSubtitleData();
   const [frameInterval, frameData] = loadFrameData();
   const FRAME_INC = 4,
-    // FRAME_START = 30,
-    FRAME_START = 0,
+    FRAME_START = 30,
+    // FRAME_START = 0,
     FRAME_WIDTH = 120, MIN_WAIT = 10;
   console.log('Loaded frame data');
   app.use(useragent.express());
@@ -57,10 +58,23 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
       }
 
       response.end();
-    } else {
-      console.log(`Request from`);
+      return;
+    }
+    if ((request.headers.referer && new URL(request.headers.referer).hostname.endsWith('twitch.tv')) ||
+    // !(request.useragent.isDesktop && request.useragent.isChrome)
+       !(request.useragent.isDesktop)
+    ) {
+      // FFZ, discord, bot request:
+      console.log(`Bot Request from`);
       console.log(request.useragent);
-      response.send(`Nothing to see here, please move along.`);
+      console.log(request.headers);
+      response.redirect(302, 'https://twitter.com/coding_garden');
+    } else {
+      // Direct request from real browser:
+      console.log(`Direct Request from`);
+      console.log(request.useragent);
+      console.log(request.headers);
+      response.redirect(302, 'https://youtu.be/dQw4w9WgXcQ');
     }
   });
 
