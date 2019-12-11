@@ -32,7 +32,9 @@ const genFrameData = async () => {
     }
     console.log(`read ${DATA_PATH + frame.fileName}`);
     const asciiFrame = await imageToAscii(DATA_PATH + frame.fileName,
-        {image_type: 'jpg', size: {height: '100%', width: '100%'}, size_options: {screen_size: {width: 60, height: 18}, preserve_aspect_ratio: false}});
+        {image_type: 'jpg', size: {height: '100%', width: '100%'}, pxWidth: 2,
+          // Note: pixels are double-wide so specify half actual terminal width:
+          size_options: {screen_size: {width: 40, height: 18}, preserve_aspect_ratio: false}});
     frame.data = asciiFrame;
   }
   console.log(`Writing to ${DATA_FILE}`);
