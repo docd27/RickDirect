@@ -5,7 +5,7 @@
     - Note that `image-to-ascii` works best with `GraphicsMagick` installed on your system
     *(and the alternative deps fail to build on my system)*
         - Install with your package manager, Windows users download from http://www.graphicsmagick.org/
-2. Obtain Rick Astley's seminal 1987 masterpiece:
+2. Obtain Rick Astley's seminal 1987 cultural masterpiece:
     - You'll need `ffmpeg` installed to convert the video frames to images
     - `mkdir ./data && cd ./data`
     - `wget https://archive.org/serve/Rick_Astley_Never_Gonna_Give_You_Up/Rick_Astley_Never_Gonna_Give_You_Up.mp4`
@@ -20,4 +20,4 @@
     - Listens on loopback port 6001.
 
 ## Deployment
-You will need to make sure there is no http / network buffering happening between node and the client. This will probably involve explicitly configuring anything in front of it like nginx etc to not proxy / buffer, and it performs best over HTTP/2 for those same reasons. We're abusing chunked Transfer-Encoding to make this work.
+You will need to make sure there is no http / network buffering happening between node and the client. This will probably involve explicitly configuring anything in front of it like nginx etc to not cache / buffer, and it performs best over HTTP/2 for those same reasons. We're abusing chunked Transfer-Encoding to make this work.
