@@ -1,5 +1,6 @@
 const fs = require('fs'), {promisify} = require('util'), zlib = require('zlib');
 const imageToAscii = promisify(require('image-to-ascii'));
+const stripAnsi = require('strip-ansi');
 const DATA_PATH = './data/', DATA_FILE = DATA_PATH + 'data.json';
 const DATA_FPS = 25;
 const DATA_FRAMEINTERVAL = (1000 / DATA_FPS) | 0;
@@ -44,7 +45,8 @@ const genFrameData = async () => {
 const loadFrameData = () => {
   if (!fs.existsSync(DATA_FILE)) throw new Error('Data missing, need to generate');
   const frameData = JSON.parse(zlib.inflateSync(Buffer.from(fs.readFileSync(DATA_FILE, 'utf8'), 'base64')));
-  return [DATA_FRAMEINTERVAL, frameData];
+  const frameWidth = stripAnsi(frameData[0].data.split('\n')[0]).length;
+  return [DATA_FPS, DATA_FRAMEINTERVAL, frameWidth, frameData];
 };
 
 const SUBTITLE_FILE = './subtitles.json';

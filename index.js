@@ -8,12 +8,11 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
 
 (async () => {
   const subData = loadSubtitleData();
-  const [frameInterval, frameData] = loadFrameData();
+  const [frameRate, frameInterval, frameWidth, frameData] = loadFrameData();
   const FRAME_INC = 4,
     FRAME_START = 30,
-    // FRAME_START = 0,
-    FRAME_WIDTH = 120, MIN_WAIT = 10;
-  console.log('Loaded frame data');
+    MIN_WAIT = 10;
+  console.log(`Loaded frame data, width: ${frameWidth} framerate: ${frameRate}`);
   app.use(useragent.express());
   app.get('*', async (request, response) => {
     if (request.useragent.isCurl) {
@@ -50,8 +49,10 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
           subIndex++;
         }
         const lastIndex = (subIndex > 0 ? subData[subIndex-1].frameIndex : 0);
-        const lyricPerc = subIndex < subData.length ? (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
-        response.write('\n\n' + ' '.repeat((FRAME_WIDTH - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) + lyric + '\n\n' + frameData[i].data + '\n\n');
+        const lyricPerc = subIndex < subData.length ?
+          (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
+        response.write('\n\n' + ' '.repeat((frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) + lyric +
+          '\n\n' + frameData[i].data + '\n\n');
         const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
         const timeToWait = frameInterval * FRAME_INC + drift;
         if (timeToWait > MIN_WAIT) await delayPromise(timeToWait);
@@ -78,9 +79,5 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
     }
   });
 
-  app.listen(port, 'localhost', () => console.log(`Example app listening on port ${port}!`));
+  app.listen(port, 'localhost', () => console.log(`App listening on port ${port}!`));
 })();
-
-
-
-
