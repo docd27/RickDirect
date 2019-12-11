@@ -2,16 +2,16 @@ const {loadFrameData, loadSubtitleData} = require('./frame.js');
 const URL = require('url').URL;
 const express = require('express'), useragent = require('express-useragent');
 const app = express();
-const port = 6001;
+const port = 6001; // Listening port
 
 const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
 
 (async () => {
   const subData = loadSubtitleData();
   const [frameRate, frameInterval, frameWidth, frameData] = loadFrameData();
-  const FRAME_INC = 4,
-    FRAME_START = 30,
-    MIN_WAIT = 10;
+  const FRAME_INC = 4, // Jump this many frames at a time, so 25/4 = 6.25 fps. 1 would be full 25fps
+    FRAME_START = 30, // Skip 30 frames of black at start of video
+    MIN_WAIT = 10; // Smallest sleep/timeout is ~10ms on node
   console.log(`Loaded frame data, width: ${frameWidth} framerate: ${frameRate}`);
   app.use(useragent.express());
   app.get('*', async (request, response) => {
@@ -49,10 +49,12 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
           subIndex++;
         }
         const lastIndex = (subIndex > 0 ? subData[subIndex-1].frameIndex : 0);
+        // Scrolling lyrics:
         const lyricPerc = subIndex < subData.length ?
           (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
         response.write('\n\n' + ' '.repeat((frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) + lyric +
           '\n\n' + frameData[i].data + '\n\n');
+        // Wait between frames, correcting for drift:
         const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
         const timeToWait = frameInterval * FRAME_INC + drift;
         if (timeToWait > MIN_WAIT) await delayPromise(timeToWait);

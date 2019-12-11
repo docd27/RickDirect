@@ -2,13 +2,13 @@ const fs = require('fs'), {promisify} = require('util'), zlib = require('zlib');
 const imageToAscii = promisify(require('image-to-ascii'));
 const stripAnsi = require('strip-ansi');
 const DATA_PATH = './data/', DATA_FILE = DATA_PATH + 'data.json';
-const DATA_FPS = 25;
+const DATA_FPS = 25; // Framerate of Rick_Astley_Never_Gonna_Give_You_Up.mp4
 const DATA_FRAMEINTERVAL = (1000 / DATA_FPS) | 0;
 // Convert mp4 to jpegs with ffmpeg -i Rick_Astley_Never_Gonna_Give_You_Up.mp4 image%d.jpg
 
 const genFrameData = async () => {
   console.log('Reading image files...');
-  let frames = [];
+  const frames = [];
   const files = await promisify(fs.readdir)(DATA_PATH);
   for (const file of files) {
     const matches = file.match(/^image(\d+)\.jpg$/);
