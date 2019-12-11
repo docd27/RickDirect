@@ -1,4 +1,5 @@
 const {loadFrameData, loadSubtitleData} = require('./frame.js');
+const chalk = require('chalk');
 const URL = require('url').URL;
 const express = require('express'), useragent = require('express-useragent');
 const app = express();
@@ -45,14 +46,15 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
           break;
         }
         if (subIndex < subData.length && i >= subData[subIndex].frameIndex) {
-          lyric = subData[subIndex].text;
+          lyric = ' ' + subData[subIndex].text + ' ';
           subIndex++;
         }
         const lastIndex = (subIndex > 0 ? subData[subIndex-1].frameIndex : 0);
         // Scrolling lyrics:
         const lyricPerc = subIndex < subData.length ?
           (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
-        response.write('\n\n' + ' '.repeat((frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) + lyric +
+        response.write('\n\n' + ' '.repeat((frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) +
+          chalk.reset.bold.black.bgWhiteBright(lyric) +
           '\n\n' + frameData[i].data + '\n\n');
         // Wait between frames, correcting for drift:
         const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
