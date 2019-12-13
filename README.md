@@ -1,5 +1,8 @@
 # RickDirect
 
+## What is this?
+An express app that rickrolls you if you `curl` it. With apologies to [CJ of Coding Garden](https://twitter.com/coding_garden).
+
 ## Setup
 1. Install dependencies: `npm install`
     - Note that `image-to-ascii` works best with `GraphicsMagick` installed on your system
