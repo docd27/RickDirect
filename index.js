@@ -10,7 +10,7 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
 (async () => {
   const subData = loadSubtitleData();
   const [frameRate, frameInterval, frameWidth, frameData] = loadFrameData();
-  const FRAME_INC = 4, // Jump this many frames at a time, so 25/4 = 6.25 fps. 1 would be full 25fps
+  const FRAME_INC = 1, // Jump this many frames at a time, so 25/4 = 6.25 fps. 1 would be full 25fps
     FRAME_START = 30, // Skip 30 frames of black at start of video
     MIN_WAIT = 10; // Smallest sleep/timeout is ~10ms on node
   console.log(`Loaded frame data, width: ${frameWidth} framerate: ${frameRate}`);
@@ -45,6 +45,7 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
           console.log('Aborted playback loop');
           break;
         }
+        const clrEscape = (i === FRAME_START) ? '\x1B[0;0f\x1B[2J\x1B[0;0f' : '\x1B[0;0f'; // Cursor to 0,0 with full clear on first frame
         if (subIndex < subData.length && i >= subData[subIndex].frameIndex) {
           lyric = ' ' + subData[subIndex].text + ' ';
           subIndex++;
@@ -53,8 +54,10 @@ const delayPromise = (duration) => new Promise((resolve) => setTimeout(resolve, 
         // Scrolling lyrics:
         const lyricPerc = subIndex < subData.length ?
           (i - lastIndex) / (subData[subIndex].frameIndex - lastIndex) : 0.5;
-        response.write('\n\n' + ' '.repeat((frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0) +
-          chalk.reset.bold.black.bgWhiteBright(lyric) +
+        const padLeft = (frameWidth - lyric.length)*(0.1 + 0.8 * (1 - lyricPerc))|0;
+        const padRight = frameWidth - (lyric.length + padLeft);
+        response.write(clrEscape + '\n\n' + ' '.repeat(padLeft) +
+          chalk.reset.bold.black.bgWhiteBright(lyric) + ' '.repeat(padRight) +
           '\n\n' + frameData[i].data + '\n\n');
         // Wait between frames, correcting for drift:
         const drift = (i - FRAME_START) * frameInterval - (Date.now() - startTime);
