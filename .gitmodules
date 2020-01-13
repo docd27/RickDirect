@@ -1,0 +1,3 @@
+[submodule "ffmpeg-with-libbaka"]
+	path = ffmpeg-with-libbaka
+	url = git@github.com:docd27/FFmpeg.git
