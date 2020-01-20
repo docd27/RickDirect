@@ -1,13 +1,10 @@
 module.exports = {
     "env": {
-        "es2017": true,
+        "es2020": true,
         "node": true,
     },
-    "globals":{
-      "BigInt": true,
-    },
     "parserOptions": {
-        "ecmaVersion": 9, // Object spread syntax
+        "ecmaVersion": 2020,
     },
     "extends": ["eslint:recommended", "google"],
     "rules": {
@@ -18,5 +15,5 @@ module.exports = {
         "no-constant-condition": ["error", { "checkLoops": false }],
         "new-cap": "off",
     },
-    
+
 };
