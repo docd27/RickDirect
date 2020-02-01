@@ -4,6 +4,8 @@ const
   denque = require('denque'),
   stringWidth = require('string-width');
 
+const {COMPOSITE_TRANSPARENT, compositeFrameFast} = require('./util.js');
+
 
 const ANSI_RESET = '\x1B[0m';
 const ANSIRGB24_FG = (r, g, b) => `\x1b[38;2;${r};${g};${b}m`;
@@ -14,17 +16,84 @@ const CHAT_FG_WHITE = `${ANSIRGB24_FG(239, 239, 241)}`;
 const CHAT_BG_PURPLE = `${ANSIRGB24_BG(119, 44, 232)}`;
 const CHAT_BG_BLACK = `${ANSIRGB24_BG(24, 24, 27)}`;
 
+const SUB_FG = `${ANSIRGB24_FG(255, 255, 255)}`;
+const SUB_BG = `${ANSIRGB24_BG(0, 0, 0)}`;
+
 /**
  *
  * @return {AsyncGeneratorFunction}
  * @param {AsyncGenerator} frameGenerator
+ * @param {AsyncGenerator} subtitleSource
  * @param {TwitchConnection} twitchConnection
  * @param {Number} innerWidth
  * @param {Number} innerHeight
  * @param {Number} chatWidth
  */
-const twitchUI = (frameGenerator, twitchConnection,
-    innerWidth=80, innerHeight = 24, chatWidth = 20) => async function* () {
+const twitchUI = (frameGenerator, subtitleSource, twitchConnection,
+    innerWidth=80, innerHeight = 24, chatWidth = 20, subtitleHoldUS = 5000000n) => async function* () {
+  const subtitleShiftVert = (innerHeight + 1) - 2;
+  const subtitleHorzPadding = 2;
+  const subtitleInnerWidth = innerWidth - 2 * subtitleHorzPadding;
+
+  let subtitleSyncPts = 0n;
+  let subtitleSyncDelay = 0n;
+  let subtitleShiftRight = 0;
+  const subtitleQueue = new denque();
+  const consumeSubtitleStream = async () => {
+    for await (const data of subtitleSource) {
+      if (data.length) {
+        processDatums: for (let i = 0; i < data.length; i++) {
+          const datum = data[i];
+          if (!datum.type) {
+            console.error('Bad datum:', datum);
+            continue processDatums;
+          }
+          switch (datum.type) {
+            case 'delete':
+              if (!subtitleQueue.isEmpty()) subtitleQueue.pop();
+              break;
+            case 'word': {
+              const wordObj = {
+                timestamp: BigInt(datum.value.timestamp) * 1000n,
+                word: datum.value.word,
+              };
+              subtitleSyncDelay = subtitleSyncPts - wordObj.timestamp;
+              subtitleQueue.push(wordObj); // Push the new word
+              break;
+            }
+            default:
+              console.error('Bad datum:', datum);
+              continue processDatums;
+          }
+        }
+      }
+    }
+    console.log('Subtitle reader exit');
+  };
+  const renderSubtitles = () => {
+    // Discard old words from front of queue
+    while (!subtitleQueue.isEmpty() &&
+      subtitleQueue.peekFront().timestamp + subtitleSyncDelay + subtitleHoldUS < subtitleSyncPts) {
+      // subtitleShiftRight += subtitleQueue.peekFront().word.length + 1; // plus spacer
+      subtitleQueue.shift();
+    }
+    // if (subtitleQueue.isEmpty()) subtitleShiftRight = 0;
+    const subtitleFull = COMPOSITE_TRANSPARENT.repeat(Math.min(subtitleShiftRight, subtitleInnerWidth)) +
+      subtitleQueue.toArray().map((wordObj) => wordObj.word).join(' ');
+
+    let outBuf = COMPOSITE_TRANSPARENT.repeat(subtitleHorzPadding);
+    let i = Math.max(0, subtitleFull.length - subtitleInnerWidth);
+    while (i < subtitleFull.length) {
+      const subChar = subtitleFull[i];
+      if (subChar === COMPOSITE_TRANSPARENT) {
+        outBuf += COMPOSITE_TRANSPARENT;
+      } else {
+        outBuf += SUB_FG + SUB_BG + subChar;
+      }
+      ++i;
+    }
+    return outBuf;
+  };
   const tmiMessageQueue = new denque();
   const tmiMessageHandler = (channel, userstate, message, self) => {
     if (self || channel !== twitchConnection.streamInfo.ircName) return;
@@ -93,7 +162,7 @@ const twitchUI = (frameGenerator, twitchConnection,
         if (userstate['badges']['subscriber']) result.push(['★', `${ANSIRGB24_BG(89, 57, 154)}${ANSIRGB24_FG(255, 255, 255)}`]);
         if (userstate['badges']['partner']) result.push(['✓', `${ANSIRGB24_BG(145, 70, 255)}${ANSIRGB24_FG(255, 255, 255)}`]);
         if (userstate['badges']['premium']) result.push(['♛', `${ANSIRGB24_BG(0, 160, 214)}${ANSIRGB24_FG(255, 255, 255)}`]);
-        if (userstate['badges']['turbo']) result.push(['⚟', `${ANSIRGB24_BG(89, 57, 154)}${ANSIRGB24_FG(255, 255, 255)}`]);
+        if (userstate['badges']['turbo']) result.push(['↯', `${ANSIRGB24_BG(89, 57, 154)}${ANSIRGB24_FG(255, 255, 255)}`]);
       }
       return result;
     };
@@ -122,8 +191,12 @@ const twitchUI = (frameGenerator, twitchConnection,
 
   const sideRows = new denque(Array(innerHeight).fill(CHAT_LEFT + ' '.repeat(chatWidth - CHAT_LEFT_SIZE)));
   const sideTitle = `${CHAT_BG_PURPLE}${CHAT_FG_WHITE}${`Twitch for DOS`.padStart(chatWidth, ' ')}`;
+
+  consumeSubtitleStream();
   for await (const [frameStats, frameData] of frameGenerator) {
-    const [framePts, frameDuration] = frameStats;
+    // c->pts_rel, c->duration, c->buffer_ticks, c->canonical_pts_rel, c->canonical_duration, c->stats_delay, c->lag_skipahead, c->count_reclock, c->reclock_drift, c->count_backwards, c->count_guess, c->count_skip
+    const [framePts, frameDuration, bufferTicks, canonicalFramePts, canonicalFrameDuration] = frameStats;
+    subtitleSyncPts = canonicalFramePts;
     const frameDataInner = frameData.split('\n').slice(0, innerHeight);
 
     if (sideRowsShiftIn.isEmpty()) {
@@ -146,7 +219,9 @@ const twitchUI = (frameGenerator, twitchConnection,
       ...frameDataInner.map((row, i) => row + sideRows.peekAt(i)),
       '',
     ].join('\n');
-    yield [frameStats, frameDataOut];
+    const subData = renderSubtitles();
+    const frameWithSubs = compositeFrameFast(subData, frameDataOut, subtitleShiftVert);
+    yield [[...frameStats, subtitleSyncDelay], frameWithSubs];
   }
   twitchConnection.tmiClient.removeListener('message', tmiMessageHandler);
 };

@@ -64,7 +64,7 @@ const introGenerator = (channelName, frameInterval = 33333n, screenWidth=80, scr
     const time = timeMS * 1000n;
     const endPts = pts + time;
     while (pts < endPts) {
-      yield [[pts, frameInterval], drawFrameBuffer((pts / FB_CURSOR_INTERVAL) % 2n === 0n)];
+      yield [[pts, frameInterval, 0n], drawFrameBuffer((pts / FB_CURSOR_INTERVAL) % 2n === 0n)];
       pts += frameInterval;
     }
   };
@@ -79,7 +79,7 @@ const introGenerator = (channelName, frameInterval = 33333n, screenWidth=80, scr
       let chunkIndex = 0;
       while (pts < endPts) {
         drawType(msgParts.slice(chunkIndex * chunkSize, (chunkIndex + 1) * chunkSize).join(''));
-        yield [[pts, frameInterval], drawFrameBuffer((pts / FB_CURSOR_INTERVAL) % 2n === 0n)];
+        yield [[pts, frameInterval, 0n], drawFrameBuffer((pts / FB_CURSOR_INTERVAL) % 2n === 0n)];
         chunkIndex++;
         pts += frameInterval;
       }
@@ -113,14 +113,14 @@ const introGenerator = (channelName, frameInterval = 33333n, screenWidth=80, scr
     if (frameCount > 0) {
       const shiftSize = (shiftFrom / frameCount);
       while (pts < endPts) {
-        yield [[pts, frameInterval], drawSlice(slices, sliceWidth, padTop, shiftCurrent | 0)];
+        yield [[pts, frameInterval, 0n], drawSlice(slices, sliceWidth, padTop, shiftCurrent | 0)];
         shiftCurrent -= shiftSize;
         pts += frameInterval;
       }
     }
     const idleEndPts = pts + (idleTimeMS * 1000n);
     while (pts < idleEndPts) {
-      yield [[pts, frameInterval], drawSlice(slices, sliceWidth, padTop, 0)];
+      yield [[pts, frameInterval, 0n], drawSlice(slices, sliceWidth, padTop, 0)];
       pts += frameInterval;
     }
   };

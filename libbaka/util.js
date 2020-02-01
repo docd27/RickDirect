@@ -94,6 +94,8 @@ const frameSync = (frameGenerator, syncWait = true, skipPts = null) => async fun
    *    - presentation timestamps will be monotonic,
    *    - pts0 + d0 = pts1 for all frames, since we reclock VFR frames
    */
+
+  // c->pts_rel, c->duration, c->buffer_ticks, c->canonical_pts_rel, c->canonical_duration, c->stats_delay, c->lag_skipahead, c->count_reclock, c->reclock_drift, c->count_backwards, c->count_guess, c->count_skip
   let firstFrameTicks = 0n, firstFramePts = 0n;
   let lastPresentTime = 0n;
   let lagSkipAhead = 0n;
@@ -103,7 +105,7 @@ const frameSync = (frameGenerator, syncWait = true, skipPts = null) => async fun
   let ticksDts, ticksPtsStart, ticksPtsEnd;
 
   for await (const frame of frameGenerator) {
-    const [[framePts, frameDuration]] = frame;
+    const [[framePts, frameDuration, bufferDuration]] = frame;
     if (skipPts && framePts < skipPts) continue;
 
     ticksDts = getMicroTickCount();
@@ -549,7 +551,7 @@ const gzipFileStream = (filepath) => {
 };
 
 /**
- * Read gz file
+ * Read file
  * @param {String} filepath path to .gz file
  * @return {ReadableStream} with no encoding set (binary)
  */
@@ -559,7 +561,7 @@ const inFileStream = (filepath) => {
 };
 
 /**
- * Write gz file
+ * Write file
  * @param {String} filepath path to .gz file
  * @return {WriteableStream} filepath with no encoding set (binary)
  */
@@ -585,6 +587,95 @@ const loadSubtitleData = (SUBTITLE_FILE = './subtitles.json') => {
   subtitleData.sort(({pts: a}, {pts: b}) => Number(a - b));
   return subtitleData;
 };
+
+
+const OBJECT_END_ETB = '\x17';
+
+/**
+ * Emits objects terminated by ETB chars
+ * @param {ReadableStream} inputStream Stream of objects
+ * @return {AsyncGeneratorFunction} Object data
+ */
+const objectReaderStream = (inputStream) => async function* () {
+  let inputBuffer = '';
+  // if (inputStream.isTTY) {
+  //   inputStream.setRawMode(true);
+  //   inputStream.resume();
+  // }
+  inputStream.setEncoding('utf8');
+  for await (let inputChunk of inputStream) {
+    while (true) {
+      let i = 0;
+      for (; i < inputChunk.length && inputChunk[i] !== FRAME_END_ETB; i++);
+      if (i < inputChunk.length) { // ETB at inputChunk[i]
+        inputBuffer += inputChunk.slice(0, i);
+
+        let data = null;
+        try {
+          data = JSON.parse(inputBuffer);
+        } catch {
+          console.error(`objectReaderStream() : Malformed JSON: '${inputBuffer}'`);
+          data = null;
+        }
+        if (data !== null) yield data;
+        inputBuffer = '';
+
+        // inputChunk may have further ETBs, continue
+        inputChunk = inputChunk.slice(i+1);
+      } else {
+        inputBuffer += inputChunk;
+        break; // exit while and await next chunk
+      }
+    }
+  }
+};
+
+
+/**
+ * @typedef {Object} BufferedObjectWriter
+ * @property {Function} writeObject (object): write object
+ * @property {Function} done (): close the stream
+ */
+/**
+ * Returns a BufferedObjectWriter bound to the given output stream
+ * @param {WritableStream} outputStream stream to write to
+ * @return {BufferedObjectWriter} for writing objects
+ */
+const objectWriterStream = (outputStream) => {
+  outputStream.setDefaultEncoding('utf8');
+  return {
+    writeObject: (data) => outputStream.write(JSON.stringify(data) + OBJECT_END_ETB, 'utf8'),
+    done: () => outputStream.end(),
+  };
+};
+
+/**
+ * @typedef {Object} AsyncObjectWriter
+ * @property {Function} writeObject async (frameData): write framedata
+ * @property {Function} done async (): close the file
+ */
+/**
+ * Returns a FrameWriter bound to the given output stream
+ * @param {WritableStream} outputStream stream to write to
+ * @return {AsyncObjectWriter} for writing frame data
+ */
+const objectWriterStreamAsync = (outputStream) => {
+  outputStream.setDefaultEncoding('utf8');
+  return {
+    writeObject: async (data) => {
+      if (!outputStream.write(JSON.stringify(data) + OBJECT_END_ETB, 'utf8')) {
+        // Wait for output buffer to drain
+        await once(outputStream, 'drain');
+      }
+    },
+    done: async () => {
+      outputStream.end();
+      // Wait until flushed
+      await streamFinished(outputStream);
+    },
+  };
+};
+
 
 const getMicroTickCount = () => process.hrtime.bigint() / 1000n;
 
@@ -615,4 +706,7 @@ module.exports = {
   compositeFrameFast,
   loadSubtitleData,
   COMPOSITE_TRANSPARENT,
+  objectReaderStream,
+  objectWriterStream,
+  objectWriterStreamAsync,
 };

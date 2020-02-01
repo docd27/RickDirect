@@ -12,7 +12,8 @@ if (program.args.length !== 1) {
 const fileName = program.args[0];
 
 (async () => {
-  const frameSource = frameSync(frameGeneratorStream(process.stdin)(), false)();
+  // const frameSource = frameSync(frameGeneratorStream(process.stdin)(), false)();
+  const frameSource = frameGeneratorStream(process.stdin)();
   await frameWriter(frameSource, frameWriterStreamAsync(gzipFileStream(fileName)));
 })().catch((err) => console.error(err));
 

@@ -12,6 +12,7 @@ const {
   compositeFrameFast,
   loadSubtitleData,
   COMPOSITE_TRANSPARENT,
+  objectReaderStream,
 } = require('./libbaka');
 
 const
@@ -19,7 +20,8 @@ const
   express = require('express'),
   useragent = require('express-useragent'),
   compression = require('compression'),
-  zlib = require('zlib');
+  zlib = require('zlib'),
+  net = require('net');
 
 
 const app = express();
@@ -35,9 +37,9 @@ const ANSI_CURSORON = '\x1b[?25h';
 const OUTPUT_START = ANSI_CLEAR;
 const FRAME_START = ANSI_RESET + ANSI_CURSOROFF + ANSI_ORIGIN;
 // const FRAME_START = ANSI_RESET + ANSI_ORIGIN;
-const FRAME_END = ANSI_CURSORON;
+const FRAME_END = ANSI_CURSORON + ANSI_RESET;
 // const FRAME_END = '';
-const OUTPUT_END = ANSI_CLEAR;
+const OUTPUT_END = FRAME_END + ANSI_CLEAR;
 
 // const int64Digits = 19;
 const int64Digits = 10;
@@ -52,10 +54,8 @@ const estBlockSize = (width, height) =>
   FRAME_END.length +
   180; // Stats length
 
-// const DO_INTRO = false;
-// const RICKROLL_DELAY = 2000000n;
 
-const DO_INTRO = true;
+// const RICKROLL_DELAY = 2000000n;
 const RICKROLL_DELAY = 15000000n;
 
 
@@ -66,13 +66,16 @@ const RICKROLL_MAIN = RICKROLL_DELAY + 5000000n;
 const program = require('commander');
 // program.option('-v, --verbose', 'Verbose output');
 // program.option('-d, --debug', 'Debug mode');
-program.usage("[options] channel")
+program.option('-fd, --fd <number>', 'Subtitles file descriptor');
+program.usage("[options] channel");
 program.parse(process.argv);
-if (program.args.length !== 1) {
+if (program.fd === undefined || program.args.length !== 1) {
   program.outputHelp();
   return;
 }
 const channelName = program.args[0];
+const subtitleFD = program.fd | 0;
+const subtitlePipe = new net.Socket({fd: subtitleFD});
 
 const inputWidth = 65;
 const inputHeight = 23;
@@ -84,6 +87,7 @@ const LYRIC_START = `${ANSIRGB24_FG(239, 239, 241)}${ANSIRGB24_BG(119, 44, 232)}
 
 const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
 
+const hasOwnProperty = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);
 
 (async () => {
   const subData = loadSubtitleData();
@@ -93,8 +97,9 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
   const streamName = twitchConnection.streamInfo.display_name;
 
   const frameSource = frameSync(frameGeneratorStream(process.stdin)(), false)();
+  const subtitleSource = objectReaderStream(subtitlePipe)();
 
-  const twitchUISource = twitchUI(frameSource, twitchConnection, inputWidth, inputHeight, 15)();
+  const twitchUISource = twitchUI(frameSource, subtitleSource, twitchConnection, inputWidth, inputHeight, 15)();
 
   const frameMulti = new FrameEmitterMulti();
   frameMulti.run(twitchUISource);
@@ -105,8 +110,14 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
     chunkSize: estBlockSize(inputWidth, inputHeight),
     // strategy: zlib.Z_FILTERED,
   }));
+  app.set('trust proxy', '127.0.0.1');
   app.get('*', async (request, response) => {
     if (request.useragent.isCurl) {
+      const doRick = !(hasOwnProperty(request.query, 'norick') || hasOwnProperty(request.query, 'quiet'));
+      const doIntro = !(hasOwnProperty(request.query, 'nointro') || hasOwnProperty(request.query, 'quiet'));
+      const doDebug = hasOwnProperty(request.query, 'debug');
+      console.log(`${request.ip}: Playback start`);
+
       response.setHeader('Connection', 'Transfer-Encoding');
       response.setHeader('Content-Type', 'text/html; charset=utf-8');
       response.setHeader('Transfer-Encoding', 'chunked');
@@ -132,11 +143,12 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
 
       response.write(OUTPUT_START); // full clear
       const rickStream = frameGeneratorStream(gunzipFileStream(RICKROLL_PATH))();
-      if (DO_INTRO) {
+      if (doIntro) {
         const introOutput = frameSync(introGenerator(streamName)())();
-        for await (const [, frameData] of introOutput) {
+        for await (const [frameHeader, frameData] of introOutput) {
           if (abortFlag) break;
-          response.write(FRAME_START + frameData + FRAME_END);
+          const debugInfo = doDebug ? frameHeader.map(formatInt64).join(', ') + '\n\n' : '';
+          response.write(FRAME_START + debugInfo + frameData + FRAME_END);
           response.flush();
         }
       }
@@ -212,7 +224,7 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
 
         for await (const [frameHeader, frameData] of frameOutput) {
           if (abortFlag) break;
-          if (!rickFlag && getMicroTickCount() - startTime >= RICKROLL_DELAY) rickFlag = 1;
+          if (!rickFlag && doRick && getMicroTickCount() - startTime >= RICKROLL_DELAY) rickFlag = 1;
           switch (rickFlag) {
             case 1:
               if (getMicroTickCount() - startTime >= RICKROLL_MAIN) rickFlag = 2;
@@ -222,20 +234,26 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
               if (!rickOutput) rickOutput = frameSync(rickStream, true, RICKROLL_SKIP_PTS)();
               if (!rickNext || !rickNext.done) rickNext = await rickOutput.next();
           }
+
+          const debugInfo = doDebug ? frameHeader.map(formatInt64).join(', ') + '\n\n' : '';
           if (rickNext && !rickNext.done) {
-            const [[rickPts], rickDataIn] = rickNext.value;
+            const [rickHeader, rickDataIn] = rickNext.value;
+            const [rickPts] = rickHeader;
+            const rickDebugInfo = doDebug ? rickHeader.map(formatInt64).join(', ') + '\n\n' : '';
             const subData = renderSubtitle(rickPts);
             const rickData = compositeFrameFast(subData, rickDataIn, 21);
             const compData = compositeFrameFast(rickData, frameData, 1);
             response.write(
                 FRAME_START +
+                debugInfo +
+                rickDebugInfo +
                 compData +
                 FRAME_END);
           } else {
+
             response.write(
                 FRAME_START +
-                // frameHeader.map(formatInt64).join(', ') +
-                // '\n\n' +
+                debugInfo +
                 frameData +
                 FRAME_END);
           }
@@ -245,7 +263,7 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
       if (!abortFlag) {
         response.write(OUTPUT_END);
       } else {
-        console.log('Aborted playback loop');
+        console.log(`${request.ip}: Aborted playback loop`);
       }
       response.end();
       return;
@@ -254,15 +272,11 @@ const MSG_START = `${ANSIRGB24_FG(255, 255, 255)}${ANSIRGB24_BG(166, 11, 0)}`;
        !(request.useragent.isDesktop)
     ) {
       // FFZ, discord, bot request:
-      console.log(`Bot Request from`);
-      console.log(request.useragent);
-      console.log(request.headers);
+      console.log(`${request.ip}: Bot Request from ${request.useragent.source}`);
       response.redirect(302, 'https://twitter.com/coding_garden');
     } else {
       // Direct request from real browser:
-      console.log(`Direct Request from`);
-      console.log(request.useragent);
-      console.log(request.headers);
+      console.log(`${request.ip}: Direct Request from ${request.useragent.source}`);
       response.redirect(302, 'https://youtu.be/dQw4w9WgXcQ');
     }
   });

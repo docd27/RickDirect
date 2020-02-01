@@ -13,6 +13,6 @@ const fileName = program.args[0];
 
 (async () => {
   const frameSource = frameSync(frameGeneratorStream(gunzipFileStream(fileName))(), true)();
-  await terminalFrameWriter(frameSource, process.stdout);
+  await terminalFrameWriter(frameSource, process.stdout, true);
 })().catch((err) => console.error(err));
 

@@ -5,4 +5,5 @@ module.exports = {
   ...require('./util.js'),
   ...require('./twitch.js'),
   ...require('./intro.js'),
+  ...require('./transcriber.js'),
 };
